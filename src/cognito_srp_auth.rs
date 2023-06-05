@@ -1,19 +1,21 @@
-use aws_config::meta::region::RegionProviderChain;
-use aws_config::provider_config::ProviderConfig;
-use aws_config::RetryConfig;
-use aws_sdk_cognitoidentityprovider::model::{
-    AuthFlowType, AuthenticationResultType, ChallengeNameType,
-};
-use aws_sdk_cognitoidentityprovider::output::RespondToAuthChallengeOutput;
-use aws_sdk_cognitoidentityprovider::{Client, Region};
-use hyper;
-use hyper::client::HttpConnector;
-use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use std::collections::HashMap;
 use std::env;
 
-use crate::error::CognitoSrpAuthError;
+use aws_config::meta::region::RegionProviderChain;
+use aws_config::provider_config::ProviderConfig;
+use aws_config::retry::RetryConfig;
+use aws_sdk_cognitoidentityprovider::config::Region;
+use aws_sdk_cognitoidentityprovider::operation::respond_to_auth_challenge::RespondToAuthChallengeOutput;
+use aws_sdk_cognitoidentityprovider::types::{
+    AuthFlowType, AuthenticationResultType, ChallengeNameType,
+};
+use aws_sdk_cognitoidentityprovider::Client;
 use cognito_srp::SrpClient;
+use hyper;
+use hyper::client::HttpConnector;
+use hyper_proxy::{Intercept, Proxy, ProxyConnector};
+
+use crate::error::CognitoSrpAuthError;
 
 pub struct CognitoAuthInput {
     pub client_id: String,
@@ -70,17 +72,18 @@ async fn get_cognito_idp_client(pool_id: &str) -> Result<Client, CognitoSrpAuthE
         .load()
         .await;
 
-    let cognito_idp_config = aws_sdk_cognitoidentityprovider::config::Builder::from(&shared_config)
-        .retry_config(RetryConfig::disabled())
-        .build();
+    let mut config_builder = aws_sdk_cognitoidentityprovider::config::Builder::from(&shared_config)
+        .retry_config(RetryConfig::disabled());
 
-    let cognito_client = if let Some(proxy_conn) = proxy_opt {
+    if let Some(proxy_conn) = proxy_opt {
         let hyper_client = aws_smithy_client::hyper_ext::Adapter::builder().build(proxy_conn);
-        Client::from_conf_conn(cognito_idp_config, hyper_client)
-    } else {
-        Client::from_conf(cognito_idp_config)
-    };
-    Ok(cognito_client)
+
+        config_builder = config_builder.http_connector(hyper_client)
+    }
+
+    let cognito_idp_config = config_builder.build();
+
+    Ok(Client::from_conf(cognito_idp_config))
 }
 
 async fn process_mfa(

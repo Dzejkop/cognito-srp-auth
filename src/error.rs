@@ -1,7 +1,9 @@
-use aws_sdk_cognitoidentityprovider::error::{InitiateAuthError, RespondToAuthChallengeError};
+use std::io;
+
+use aws_sdk_cognitoidentityprovider::operation::initiate_auth::InitiateAuthError;
+use aws_sdk_cognitoidentityprovider::operation::respond_to_auth_challenge::RespondToAuthChallengeError;
 use aws_smithy_client;
 use cognito_srp::CognitoSrpError;
-use std::io;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
